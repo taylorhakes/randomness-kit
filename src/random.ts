@@ -5,9 +5,30 @@ import type { RandomSource } from "./source";
 /** `2^32` as an exact IEEE-754 double. Never derived via bit-shifting. */
 const UINT32_RANGE = 2 ** 32;
 
+/**
+ * The largest number of distinct values {@link Random.int} can span: `2^53`
+ * (`Number.MAX_SAFE_INTEGER + 1`). Above this, consecutive integers are no
+ * longer exactly representable as IEEE-754 doubles, so uniformity could not be
+ * guaranteed.
+ */
+const MAX_RANGE = 2 ** 53;
+
 /** Default character set for {@link Random.string}: `A–Z a–z 0–9`. */
 const DEFAULT_CHARSET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/**
+ * Number of bits needed to represent `x` (`0 <= x < 2^53`); `bitLength(0) === 0`.
+ *
+ * `Math.clz32` is an exact integer operation (no floating-point rounding, unlike
+ * `Math.log2`), so the boundary at every power of two is precise. It only sees
+ * 32 bits, so values that need more are split into a high and low word.
+ */
+function bitLength(x: number): number {
+  return x < UINT32_RANGE
+    ? 32 - Math.clz32(x) // fits in 32 bits; clz32(0) === 32 ⇒ bitLength(0) === 0
+    : 32 + (32 - Math.clz32(Math.floor(x / UINT32_RANGE))); // high word (< 2^21)
+}
 
 /**
  * Ergonomic randomness API. Shapes raw bits from a {@link RandomSource} into
@@ -46,8 +67,11 @@ export class Random {
    * Returns a uniformly distributed integer in the inclusive range
    * `[min, max]`, free of modulo bias (via rejection sampling).
    *
+   * Supports any span of up to `2^53` values across the safe-integer range,
+   * including spans wider than `2^32`.
+   *
    * @throws {TypeError} if `min` or `max` is not a safe integer.
-   * @throws {RangeError} if `min > max` or the range exceeds `2^32`.
+   * @throws {RangeError} if `min > max` or the span exceeds `2^53` values.
    */
   int(min: number, max: number): number {
     assertSafeInteger(min, "min");
@@ -57,26 +81,53 @@ export class Random {
         `randomness-kit: min (${min}) must be <= max (${max}).`,
       );
     }
+    if (min === max) return min; // single value — no draw needed
 
-    // All arithmetic stays in doubles (exact <= 2^53); `range` is never
-    // bit-coerced, which would wrap 2^32 to 0.
-    const range = max - min + 1;
-    if (range > UINT32_RANGE) {
+    // `max - min` is exact for every span we accept (it is < 2^53, where all
+    // integers are representable). Wider spans round, but they all fail this
+    // guard regardless, so the comparison stays correct.
+    if (max - min >= MAX_RANGE) {
       throw new RangeError(
-        `randomness-kit: range (${range}) exceeds the supported maximum of 2^32.`,
+        `randomness-kit: span (${max - min + 1}) exceeds the supported maximum of 2^53 values.`,
       );
     }
 
-    // Largest multiple of `range` that fits in a uint32; reject above it to
-    // remove modulo bias. When range === 2^32, threshold === 2^32 and every
-    // draw is accepted.
-    const threshold = UINT32_RANGE - (UINT32_RANGE % range);
+    return min + this.randbelow(max - min + 1); // range is 2..2^53, exact
+  }
+
+  /**
+   * Uniform integer in `[0, n)` via bit-length rejection sampling (the
+   * technique CPython's `random` uses): draw the fewest bits that cover `n`,
+   * reject any draw `>= n`, and retry. Acceptance is always above 50%, and
+   * only as many bits as the range needs are consumed.
+   *
+   * @param n range size, `2 <= n <= 2^53`.
+   */
+  private randbelow(n: number): number {
+    const bits = bitLength(n - 1);
     let r: number;
     do {
-      r = this.source.nextUint32();
-    } while (r >= threshold);
+      r = this.randomBits(bits);
+    } while (r >= n);
+    return r;
+  }
 
-    return min + (r % range);
+  /**
+   * Returns a uniformly random integer in `[0, 2^bits)` for `1 <= bits <= 53`.
+   * One 32-bit word covers up to 32 bits; a second word supplies the rest.
+   */
+  private randomBits(bits: number): number {
+    if (bits <= 32) {
+      // Keep the top `bits` of one draw; for bits === 32 this is `>>> 0`, the
+      // whole word. (Top bits, not bottom — high bits of a CSPRNG word are
+      // exactly as uniform, and this avoids a mask constant.)
+      return this.source.nextUint32() >>> (32 - bits);
+    }
+    // bits in 33..53: combine a full low word with the top `bits - 32` of a
+    // high word. The product stays < 2^53, so it is an exact double.
+    const low = this.source.nextUint32();
+    const high = this.source.nextUint32() >>> (64 - bits);
+    return high * UINT32_RANGE + low;
   }
 
   /**

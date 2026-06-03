@@ -30,7 +30,8 @@ default** and works identically in Node, browsers, Deno, and Bun.
   `RandomSource` seam is retained so it can be added later without an API break.
 - Not a cryptographic primitives library (no hashing, signing, key derivation).
 - No distribution helpers beyond the basics (no Gaussian/Poisson/etc.).
-- No `int()` ranges wider than `2^32` (validated and rejected).
+- No `int()` spans wider than `2^53` values — beyond `Number.MAX_SAFE_INTEGER`
+  consecutive integers are not exactly representable (validated and rejected).
 
 ---
 
@@ -89,26 +90,35 @@ specific integer).
   **Deno**, and **Bun** — one code path, no `node:crypto` fallback, no branching.
 - Constructor checks `globalThis.crypto?.getRandomValues` once and throws a clear
   `Error` if absent (e.g. ancient runtimes), rather than failing later.
-- `nextUint32()` draws 4 bytes into a reused `Uint32Array(1)` and returns `[0] >>> 0`.
+- `nextUint32()` serves words from a pooled `Uint32Array(256)`, refilling the
+  whole pool with one `getRandomValues` call when drained, then returns `[i] >>> 0`.
+  This amortizes the syscall: a 16-char `string()` is one fill, not 16 draws.
 - `fillBytes(buf)` delegates directly to `getRandomValues` (chunked at 65536 bytes,
   the spec's per-call quota, so large buffers don't throw `QuotaExceededError`).
+  It bypasses the pool — bulk fills already make one call per chunk.
 
-### 3.2 Unbiased integer in range — modulo-with-rejection
-For inclusive `[min, max]`:
+### 3.2 Unbiased integer in range — bit-length rejection
+For inclusive `[min, max]` (after short-circuiting `min == max`):
 ```
-range     = max - min + 1            // plain JS number, never bitwise
-MAX       = 2 ** 32                  // 4294967296 (exact double)
-threshold = MAX - (MAX % range)      // largest multiple of range ≤ MAX
-do { r = source.nextUint32() } while (r >= threshold)
-return min + (r % range)
+range = max - min + 1                  // plain JS number, never bitwise; 2..2^53
+k     = bitLength(range - 1)           // fewest bits that cover the range
+do { r = randomBits(k) } while (r >= range)
+return min + r
 ```
-- All range/threshold arithmetic stays in IEEE-754 doubles (exact ≤ `2^53`);
-  **no `<<`/`>>>` applied to `range`** (which would wrap `2^32 → 0`).
-- `range == 2^32` ⇒ `threshold == 2^32`, every draw accepted, `r % range == r`. Correct.
-- Validation: `min`/`max` finite safe integers, `min <= max`, `range <= 2^32`.
+`randomBits(k)` draws the top `k` bits of one 32-bit word for `k ≤ 32`, or
+combines a full low word with the top `k - 32` bits of a second word (as
+`high * 2^32 + low`) for `33 ≤ k ≤ 53`.
 
-> Naming note (per debate gate): this is **modulo-with-rejection**, *not* Lemire's
-> multiply-high method. Documented accurately.
+- This is the technique CPython's `random._randbelow_with_getrandbits` uses:
+  draw minimal bits, reject `r >= range`. Acceptance is always **> 50%**, and a
+  small range consumes only a few bits rather than a full uint32.
+- All arithmetic stays in IEEE-754 doubles (exact ≤ `2^53`); the two-word path
+  yields integers `< 2^53`, which are exactly representable.
+- Validation: `min`/`max` finite safe integers, `min <= max`, span `<= 2^53`
+  (checked as `max - min < 2^53`, which is exact for every accepted span).
+
+> Naming note: this is **bit-length rejection** (a.k.a. `getrandbits`-style),
+> *not* modulo reduction and *not* Lemire's multiply-high method.
 
 ### 3.3 `float()` — full 53-bit precision
 Two draws combined to match the precision of a standard IEEE-754 double
@@ -164,7 +174,7 @@ interface RandomSource { nextUint32(): number; fillBytes(buf: Uint8Array): void 
 
 ### Errors
 - `TypeError` — wrong argument types (non-integer range, empty charset, non-array `pick`).
-- `RangeError` — `min > max`, range `> 2^32`, `length < 0`, `p` out of `[0,1]`.
+- `RangeError` — `min > max`, span `> 2^53` values, `length < 0`, `p` out of `[0,1]`.
 - `Error` — Web Crypto unavailable when constructing `CryptoSource`.
 
 ---
@@ -208,7 +218,7 @@ randomness/
 │  └─ errors.ts            # validation helpers
 └─ test/
    ├─ mock-source.ts       # test helper: scripted RandomSource
-   ├─ int.test.ts          # range correctness + bias + 2^32 boundary
+   ├─ int.test.ts          # range correctness + bias + 2^32/2^53 spans
    ├─ string.test.ts       # length, charset, distribution, unicode
    ├─ bytes.test.ts        # length, chunking, validation
    ├─ float-bool.test.ts   # 53-bit float range, bool(p) edges
@@ -224,13 +234,15 @@ Tests inject a **mock `RandomSource`** (`test/mock-source.ts`) that returns a
 scripted sequence of uint32 values, making the shaping logic fully deterministic
 without seeding:
 
-- **Rejection sampling:** feed a value `>= threshold` and assert it's skipped, then
-  the next in-range value is used. Verify `int(n, n) === n`.
+- **Rejection sampling:** feed a value `>= range` and assert it's skipped, then
+  the next in-range value is used. Verify `int(n, n) === n` consumes no draw.
 - **Bias / uniformity:** with `CryptoSource`, draw many `int()` over a small range and
   assert every value appears with roughly expected frequency.
-- **`2^32` boundary:** `int(0, 2**32 - 1)` accepts any draw and never throws.
+- **`2^32` boundary:** `int(0, 2**32 - 1)` uses each 32-bit draw verbatim, never throws.
+- **Wide spans:** `int` over a `> 2^32` range combines two draws (`high * 2^32 + low`);
+  the `2^53` span up to `MAX_SAFE_INTEGER` is exercised.
 - **Edge cases:** `bytes(0)` → empty; `string(0)` → `""`; empty charset throws;
-  `min > max` throws; range `> 2^32` throws; `bool(0)`/`bool(1)` deterministic;
+  `min > max` throws; span `> 2^53` throws; `bool(0)`/`bool(1)` deterministic;
   `pick([])` throws.
 - **`float()`:** always in `[0, 1)`; 53-bit combination verified via scripted hi/lo draws.
 - **Unicode charset:** emoji/multi-byte charset selects whole code points.

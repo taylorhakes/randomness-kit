@@ -7,6 +7,14 @@ import type { RandomSource } from "./source";
 const MAX_BYTES_PER_CALL = 65536;
 
 /**
+ * Number of uint32 words drawn per `getRandomValues` call. `nextUint32` serves
+ * from this pool and refills only when drained, amortizing one syscall over
+ * {@link POOL_WORDS} draws (e.g. a 16-char `string()` becomes one call, not 16).
+ * 256 words = 1 KiB, well under the {@link MAX_BYTES_PER_CALL} quota.
+ */
+const POOL_WORDS = 256;
+
+/**
  * The default, secure {@link RandomSource}. Draws from a CSPRNG via
  * `globalThis.crypto.getRandomValues`, which is available in Node 20+, all
  * modern browsers, Deno, and Bun — a single code path with no environment
@@ -16,7 +24,8 @@ const MAX_BYTES_PER_CALL = 65536;
  */
 export class CryptoSource implements RandomSource {
   private readonly crypto: Crypto;
-  private readonly scratch = new Uint32Array(1);
+  private readonly pool = new Uint32Array(POOL_WORDS);
+  private poolIndex = POOL_WORDS; // start drained so the first draw refills
 
   constructor() {
     const c = globalThis.crypto;
@@ -31,8 +40,11 @@ export class CryptoSource implements RandomSource {
   }
 
   nextUint32(): number {
-    this.crypto.getRandomValues(this.scratch);
-    return this.scratch[0] >>> 0;
+    if (this.poolIndex >= this.pool.length) {
+      this.crypto.getRandomValues(this.pool);
+      this.poolIndex = 0;
+    }
+    return this.pool[this.poolIndex++]! >>> 0;
   }
 
   fillBytes(buffer: Uint8Array): void {

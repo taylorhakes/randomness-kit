@@ -4,7 +4,8 @@ import { MockSource } from "./mock-source";
 
 describe("pick()", () => {
   it("selects the element at the unbiased index", () => {
-    const rng = new Random(new MockSource([1])); // 1 % 3 = 1
+    // 3 items -> 2 bits; a draw whose top 2 bits == 1 selects index 1.
+    const rng = new Random(new MockSource([1 * 2 ** 30]));
     expect(rng.pick(["a", "b", "c"])).toBe("b");
   });
 

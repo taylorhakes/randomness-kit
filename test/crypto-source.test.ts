@@ -2,14 +2,19 @@ import { describe, expect, it } from "vitest";
 import { CryptoSource, Random, random } from "../src/index";
 
 describe("CryptoSource", () => {
-  it("nextUint32 returns values within [0, 2^32)", () => {
+  it("nextUint32 returns values within [0, 2^32) across pool refills", () => {
     const src = new CryptoSource();
-    for (let i = 0; i < 1000; i++) {
+    const seen = new Set<number>();
+    // 2000 draws spans several internal pool refills (pool is 256 words).
+    for (let i = 0; i < 2000; i++) {
       const v = src.nextUint32();
       expect(Number.isInteger(v)).toBe(true);
       expect(v).toBeGreaterThanOrEqual(0);
       expect(v).toBeLessThan(2 ** 32);
+      seen.add(v);
     }
+    // The pool must not be replaying one buffer: distinct values dominate.
+    expect(seen.size).toBeGreaterThan(1900);
   });
 
   it("fillBytes fills the whole buffer", () => {

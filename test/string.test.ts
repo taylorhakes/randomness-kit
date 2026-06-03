@@ -17,14 +17,17 @@ describe("string()", () => {
   });
 
   it("selects characters by unbiased index from a custom charset", () => {
-    // charset "abcd" (len 4): draws 0,1,2,3 -> "abcd"
-    const rng = new Random(new MockSource([0, 1, 2, 3]));
+    // charset "abcd" (len 4) -> 2 bits; top-2-bit draws 0,1,2,3 -> "abcd".
+    const rng = new Random(
+      new MockSource([0, 1 * 2 ** 30, 2 * 2 ** 30, 3 * 2 ** 30]),
+    );
     expect(rng.string(4, "abcd")).toBe("abcd");
   });
 
   it("treats the charset by code point so emoji are not split", () => {
+    // charset len 3 -> 2 bits; top-2-bit draws 0,2,1 -> 🍎🍊🍐.
     const charset = "🍎🍐🍊";
-    const rng = new Random(new MockSource([0, 2, 1]));
+    const rng = new Random(new MockSource([0, 2 * 2 ** 30, 1 * 2 ** 30]));
     expect(rng.string(3, charset)).toBe("🍎🍊🍐");
   });
 

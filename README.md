@@ -62,7 +62,7 @@ Creates a secure, crypto-backed `Random` instance.
 | Method | Returns | Notes |
 | --- | --- | --- |
 | `bytes(length)` | `Uint8Array` | `length` random bytes. Each call is self-contained. |
-| `int(min, max)` | `number` | Inclusive `[min, max]`, unbiased. Throws if `min > max` or range `> 2^32`. |
+| `int(min, max)` | `number` | Inclusive `[min, max]`, unbiased. Spans up to `2^53` values. Throws if `min > max` or the span exceeds `2^53`. |
 | `float()` | `number` | `[0, 1)`, 53-bit precision. |
 | `bool(p = 0.5)` | `boolean` | `true` with probability `p` (`0 ≤ p ≤ 1`). |
 | `string(length, charset?)` | `string` | Default charset `A–Z a–z 0–9`. Charset is read by Unicode code point (emoji-safe). |
