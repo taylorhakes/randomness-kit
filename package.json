@@ -40,7 +40,19 @@
     "secure"
   ],
   "license": "MIT",
-  "author": "",
+  "author": "Taylor Hakes",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/taylorhakes/randomness-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/taylorhakes/randomness-kit/issues"
+  },
+  "homepage": "https://github.com/taylorhakes/randomness-kit#readme",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "engines": {
     "node": ">=18"
   },

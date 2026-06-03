@@ -1,5 +1,9 @@
 # randomness-kit
 
+[![CI](https://github.com/taylorhakes/randomness-kit/actions/workflows/ci.yml/badge.svg)](https://github.com/taylorhakes/randomness-kit/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/randomness-kit.svg)](https://www.npmjs.com/package/randomness-kit)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+
 Small, dependency-free, **secure-by-default** randomness utilities for
 JavaScript and TypeScript. Works identically in **Node 18+, modern browsers,
 Deno, and Bun** — one code path, no environment branching.
