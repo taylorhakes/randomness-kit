@@ -5,7 +5,7 @@
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 Small, dependency-free, **secure-by-default** randomness utilities for
-JavaScript and TypeScript. Works identically in **Node 18+, modern browsers,
+JavaScript and TypeScript. Works identically in **Node 20+, modern browsers,
 Deno, and Bun** — one code path, no environment branching.
 
 All randomness is drawn from a CSPRNG (`globalThis.crypto.getRandomValues`), and
@@ -102,7 +102,7 @@ rng.int(1, 6); // deterministic
 
 | Runtime | Supported |
 | --- | --- |
-| Node | 18+ |
+| Node | 20+ |
 | Browsers | All modern (Web Crypto) |
 | Deno | ✅ |
 | Bun | ✅ |

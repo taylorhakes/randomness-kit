@@ -8,7 +8,7 @@ const MAX_BYTES_PER_CALL = 65536;
 
 /**
  * The default, secure {@link RandomSource}. Draws from a CSPRNG via
- * `globalThis.crypto.getRandomValues`, which is available in Node 18+, all
+ * `globalThis.crypto.getRandomValues`, which is available in Node 20+, all
  * modern browsers, Deno, and Bun — a single code path with no environment
  * branching.
  *
@@ -23,7 +23,7 @@ export class CryptoSource implements RandomSource {
     if (!c || typeof c.getRandomValues !== "function") {
       throw new Error(
         "randomness-kit: the Web Crypto API (globalThis.crypto.getRandomValues) " +
-          "is not available in this environment. Node 18+, a modern browser, " +
+          "is not available in this environment. Node 20+, a modern browser, " +
           "Deno, or Bun is required.",
       );
     }

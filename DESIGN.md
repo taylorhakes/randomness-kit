@@ -85,7 +85,7 @@ specific integer).
 ### 3.1 Entropy source: **Web Crypto only**
 `CryptoSource` uses **`globalThis.crypto.getRandomValues`** exclusively.
 
-- Available in **Node 18+** (Web Crypto is global), all **modern browsers**,
+- Available in **Node 20+** (Web Crypto is a default global), all **modern browsers**,
   **Deno**, and **Bun** — one code path, no `node:crypto` fallback, no branching.
 - Constructor checks `globalThis.crypto?.getRandomValues` once and throws a clear
   `Error` if absent (e.g. ancient runtimes), rather than failing later.

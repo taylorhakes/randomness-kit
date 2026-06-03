@@ -54,7 +54,7 @@
     "provenance": true
   },
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
